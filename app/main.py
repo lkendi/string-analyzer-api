@@ -43,6 +43,32 @@ def get_strings():
     return list(strings_db.values())
 
 
+@app.get("/strings/{string_value}", response_model=StringResponse)
+def get_string(string_value: str):
+
+    """
+    Get a specific string
+
+    Parameters
+    ----------
+    string_value: str - the string to get
+
+    Returns
+    -------
+    StringResponse - the properties of the string
+
+    Raises
+    ------
+    HTTPException - if the string does not exist
+    """
+    if string_value not in strings_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="String not found."
+        )
+    return strings_db[string_value]
+
+
 @app.post("/strings", response_model=StringResponse,
           status_code=status.HTTP_201_CREATED)
 def analyze_string(request: StringRequest):
