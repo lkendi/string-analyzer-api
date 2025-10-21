@@ -1,7 +1,7 @@
 """String schema module"""
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 class StringProperties(BaseModel):
     """
@@ -48,3 +48,19 @@ class StringListResponse(BaseModel):
     data: List[StringResponse]
     count: int
     filters_applied: StringFilters
+
+class InterpretedQuery(BaseModel):
+    """
+    Representation of how the natural language query was interpreted
+    """
+    original: str
+    parsed_filters: Dict[str, Any]
+
+class NaturalLanguageFilterResponse(BaseModel):
+    """
+    Response model for natural language filtering results
+    """
+    data: List[StringResponse]
+    count: int
+    interpreted_query: InterpretedQuery
+

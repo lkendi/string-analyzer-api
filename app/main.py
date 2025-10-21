@@ -6,8 +6,11 @@ from app.schemas.string import StringRequest, \
                                 StringResponse, \
                                 StringProperties, \
                                 StringFilters, \
-                                StringListResponse
+                                StringListResponse, \
+                                NaturalLanguageFilterResponse
 from app.storage import strings_db
+from app.utils.filter_strings import filter_strings
+from app.utils.natural_language_parser import parse_natural_language_query
 
 
 app = FastAPI()
@@ -56,44 +59,73 @@ def get_all_strings(filters: StringFilters = Depends()):
             detail=f"Invalid query parameter values or types: {str(e)}"
         ) from e
 
+    filters_dict = {
+        "is_palindrome": filters.is_palindrome,
+        "min_length": filters.min_length,
+        "max_length": filters.max_length,
+        "word_count": filters.word_count,
+        "contains_character": filters.contains_character
+    }
+
     if not strings_db:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No strings found."
         )
 
-    results = list(strings_db.values())
+    try:
+        result = filter_strings(filters_dict)
+    except HTTPException as e:
+        raise e
 
-    if filters.is_palindrome is not None:
-        results = list(filter(
-            lambda x: x.properties.is_palindrome ==
-            filters.is_palindrome, results))
+    return result
 
-    if filters.min_length is not None:
-        results = list(filter(
-            lambda x: x.properties.length >= filters.min_length, results))
 
-    if filters.max_length is not None:
-        results = list(filter(
-            lambda x: x.properties.length <= filters.max_length, results))
+@app.get("/strings/filter-by-natural-language",
+         response_model=NaturalLanguageFilterResponse)
+def filter_by_natural_language(query: str):
+    """
+    Filter strings by natural language query
 
-    if filters.word_count is not None:
-        results = list(filter(
-            lambda x: x.properties.word_count == filters.word_count, results))
+    Parameters
+    ----------
+    query: str - the natural language query to filter by
 
-    if filters.contains_character:
-        results = list(filter(
-            lambda x: filters.contains_character in x.value, results))
+    Returns
+    -------
+    NaturalLanguageFilterResponse - the filtered strings and their properties
+
+    Raises
+    ------
+    HTTPException - if the query is invalid or no strings exist
+    """
+
+    if not query or not isinstance(query, str):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Query is required and must be a string."
+        )
+
+    if not strings_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No strings found."
+        )
+    try:
+        filters = parse_natural_language_query(query)
+        print("filters", filters)
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid query parameter values or types: {str(e)}"
+        ) from e
 
     return {
-        "data": results,
-        "count": len(results),
-        "filters_applied": {
-            "is_palindrome": filters.is_palindrome,
-            "min_length": filters.min_length,
-            "max_length": filters.max_length,
-            "word_count": filters.word_count,
-            "contains_character": filters.contains_character
+        **filter_strings(filters),
+        "interpreted_query": {
+            "original": query,
+            "parsed_filters": filters
         }
     }
 
@@ -176,3 +208,28 @@ def analyze_string(request: StringRequest):
 
     strings_db[value] = response
     return response
+
+
+@app.delete("/strings/{string_value}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_string(string_value: str):
+    """
+    Delete a string
+
+    Parameters
+    ----------
+    string_value: str - the string to delete
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    HTTPException - if the string does not exist
+    """
+    if string_value not in strings_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="String not found."
+        )
+    del strings_db[string_value]
